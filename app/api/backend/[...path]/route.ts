@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+// Hobby plan may still cap at 10s; Pro+ allows up to 300s — helps if Railway is cold.
+export const maxDuration = 60;
 
 type RouteContext = { params: Promise<{ path?: string[] }> };
 
@@ -57,8 +60,15 @@ async function proxy(req: NextRequest, pathSegments: string[]) {
   try {
     upstream = await fetch(targetUrl, init);
   } catch (e) {
-    console.error('[api/backend proxy] fetch failed:', e);
-    return NextResponse.json({ error: 'Backend unreachable' }, { status: 502 });
+    console.error('[api/backend proxy] fetch failed:', targetUrl, e);
+    return NextResponse.json(
+      {
+        error: 'Backend unreachable',
+        hint:
+          'Is Railway online? Set NEXT_PUBLIC_API_URL for this deployment env (Preview vs Production). Cold Railway may need a retry.',
+      },
+      { status: 502 },
+    );
   }
 
   // Buffer body — piping upstream.body into NextResponse often causes 500 on Vercel.
