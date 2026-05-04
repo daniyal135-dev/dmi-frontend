@@ -1,9 +1,28 @@
 /**
  * API Configuration and Helper Functions
  * Connects frontend to Django backend
+ *
+ * NEXT_PUBLIC_API_URL must include the /api prefix, e.g.
+ * https://dmi-backend-production.up.railway.app/api
+ * (without /api the browser hits /auth/login/ on the wrong host and gets HTML → JSON parse error.)
  */
+const API_BASE_URL = (
+  process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api'
+).replace(/\/+$/, '');
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+function parseApiJson<T>(text: string): T {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('<')) {
+    throw new Error(
+      'Server returned a web page instead of JSON. In Vercel → Settings → Environment Variables, set NEXT_PUBLIC_API_URL to your Railway URL ending with /api (example: https://YOUR-SERVICE.up.railway.app/api). Redeploy after saving.'
+    );
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error('Invalid response from server (not JSON).');
+  }
+}
 
 /**
  * Get stored authentication token from localStorage
@@ -78,12 +97,23 @@ export async function login(username: string, password: string) {
     body: JSON.stringify({ username, password }),
   });
 
+  const text = await response.text();
+  const data = parseApiJson<{ access?: string; detail?: string | string[] }>(text);
+
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Login failed');
+    const d = data.detail;
+    const msg =
+      typeof d === 'string'
+        ? d
+        : Array.isArray(d)
+          ? String(d[0])
+          : 'Login failed';
+    throw new Error(msg);
   }
 
-  const data = await response.json();
+  if (!data.access) {
+    throw new Error('Login succeeded but no access token in response.');
+  }
   setAuthToken(data.access);
   return data;
 }
@@ -97,16 +127,24 @@ export async function register(username: string, email: string, password: string
     body: JSON.stringify({ username, email, password }),
   });
 
+  const text = await response.text();
+  const err = parseApiJson<
+    Record<string, unknown> & {
+      error?: string;
+      username?: string | string[];
+    }
+  >(text);
+
   if (!response.ok) {
-    const err = await response.json();
     const msg =
       err.error ||
-      (err.username && (Array.isArray(err.username) ? err.username[0] : err.username)) ||
+      (err.username &&
+        (Array.isArray(err.username) ? err.username[0] : err.username)) ||
       'Registration failed';
-    throw new Error(msg);
+    throw new Error(String(msg));
   }
 
-  return await response.json();
+  return err;
 }
 
 // Image Analysis
