@@ -61,17 +61,32 @@ async function proxy(req: NextRequest, pathSegments: string[]) {
     return NextResponse.json({ error: 'Backend unreachable' }, { status: 502 });
   }
 
-  const outHeaders = new Headers(upstream.headers);
-  return new NextResponse(upstream.body, {
+  // Buffer body — piping upstream.body into NextResponse often causes 500 on Vercel.
+  const body = await upstream.arrayBuffer();
+  const out = new Headers();
+  const ct = upstream.headers.get('content-type');
+  if (ct) {
+    out.set('content-type', ct);
+  }
+
+  return new NextResponse(body, {
     status: upstream.status,
     statusText: upstream.statusText,
-    headers: outHeaders,
+    headers: out,
   });
 }
 
 async function handle(req: NextRequest, ctx: RouteContext) {
-  const { path } = await ctx.params;
-  return proxy(req, path ?? []);
+  try {
+    const { path } = await ctx.params;
+    return await proxy(req, path ?? []);
+  } catch (e) {
+    console.error('[api/backend proxy] error:', e);
+    return NextResponse.json(
+      { error: 'Proxy failed. Check Vercel Function logs.' },
+      { status: 500 },
+    );
+  }
 }
 
 export const GET = handle;
