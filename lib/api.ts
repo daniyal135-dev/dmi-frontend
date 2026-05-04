@@ -1,20 +1,32 @@
 /**
- * API Configuration and Helper Functions
- * Connects frontend to Django backend
+ * API Configuration — Django backend
  *
- * NEXT_PUBLIC_API_URL must include the /api prefix, e.g.
- * https://dmi-backend-production.up.railway.app/api
- * (without /api the browser hits /auth/login/ on the wrong host and gets HTML → JSON parse error.)
+ * - **Local:** uses NEXT_PUBLIC_API_URL or http://127.0.0.1:8000/api (direct to Django).
+ * - **Production (Vercel etc.):** browser calls same-origin `/api/backend/...` → Route Handler
+ *   proxies to Railway. Server needs BACKEND_API_BASE_URL or NEXT_PUBLIC_API_URL ending in `/api`.
+ *   This avoids stale `NEXT_PUBLIC_*` in the client bundle causing HTML/JSON errors.
  */
-const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api'
-).replace(/\/+$/, '');
+function apiBase(): string {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    const isLocal =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '[::1]';
+    if (!isLocal) {
+      return `${window.location.origin}/api/backend`;
+    }
+  }
+  return (
+    process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api'
+  ).replace(/\/+$/, '');
+}
 
 function parseApiJson<T>(text: string): T {
   const trimmed = text.trim();
   if (trimmed.startsWith('<')) {
     throw new Error(
-      'Server returned a web page instead of JSON. In Vercel → Settings → Environment Variables, set NEXT_PUBLIC_API_URL to your Railway URL ending with /api (example: https://YOUR-SERVICE.up.railway.app/api). Redeploy after saving.'
+      'Server returned HTML instead of JSON. If you are on Vercel: set BACKEND_API_BASE_URL (or NEXT_PUBLIC_API_URL) to https://YOUR-RAILWAY.up.railway.app/api under Project → Settings → Environment Variables, then Redeploy. Check the /api/backend proxy route logs if it persists.'
     );
   }
   try {
@@ -66,7 +78,7 @@ async function apiRequest(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(`${apiBase()}${endpoint}`, {
     ...options,
     headers,
   });
@@ -89,7 +101,7 @@ async function apiRequest(
 
 // Authentication
 export async function login(username: string, password: string) {
-  const response = await fetch(`${API_BASE_URL}/auth/login/`, {
+  const response = await fetch(`${apiBase()}/auth/login/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -119,7 +131,7 @@ export async function login(username: string, password: string) {
 }
 
 export async function register(username: string, email: string, password: string) {
-  const response = await fetch(`${API_BASE_URL}/auth/register/`, {
+  const response = await fetch(`${apiBase()}/auth/register/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
