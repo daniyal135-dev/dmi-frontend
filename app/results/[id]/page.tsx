@@ -169,9 +169,11 @@ export default function Results({ params }: { params: Promise<{ id: string }> })
             <div className="rounded-xl border border-app-border bg-app-bg-mid/80 p-8 text-center">
               {heatmapLoadError ? (
                 <p className="text-app-text">
-                  Heatmap file did not load. Set <code className="rounded bg-app-bg-mid px-1">NEXT_PUBLIC_API_URL</code> on
-                  Vercel to your API base ending in <code className="rounded bg-app-bg-mid px-1">/api</code>, redeploy, and
-                  ensure the backend serves <code className="rounded bg-app-bg-mid px-1">/media/</code> on the same host.
+                  Heatmap did not load. On Vercel set{' '}
+                  <code className="rounded bg-app-bg-mid px-1">BACKEND_API_BASE_URL</code> or{' '}
+                  <code className="rounded bg-app-bg-mid px-1">NEXT_PUBLIC_API_URL</code> to your backend API base ending in{' '}
+                  <code className="rounded bg-app-bg-mid px-1">/api</code>, redeploy, then try again (images load via{' '}
+                  <code className="rounded bg-app-bg-mid px-1">/api/backend-media/</code> so ngrok-free warnings do not block them).
                 </p>
               ) : (
                 <>

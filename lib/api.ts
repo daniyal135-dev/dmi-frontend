@@ -24,10 +24,23 @@ function apiBase(): string {
 
 /**
  * Django serves media at `/media/...` on the backend origin (not under `/api/`).
- * Uses `NEXT_PUBLIC_API_URL` ending in `/api` so Vercel clients load heatmaps from ngrok/production host.
+ *
+ * - **Production (Vercel):** same-origin `/api/backend-media/...` proxies server-side so ngrok free
+ *   HTML interstitial does not break `<img src>` (uses ngrok-skip-browser-warning like `/api/backend`).
+ * - **Local dev:** direct `http://127.0.0.1:8000/media/...`.
  */
 export function mediaFileUrl(relativePath: string): string {
-  const p = relativePath.replace(/^\/+/, '');
+  const p = relativePath.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    const isLocal =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '[::1]';
+    if (!isLocal) {
+      return `${window.location.origin}/api/backend-media/${p}`;
+    }
+  }
   const apiRoot = (
     process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api'
   ).replace(/\/+$/, '');
