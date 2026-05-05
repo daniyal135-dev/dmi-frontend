@@ -1,93 +1,187 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
-import { getUserProfile } from '@/lib/api';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  getUserProfile,
+  getAllAnalysisResults,
+  type AnalysisResultRow,
+} from '@/lib/api';
 import { AppBackground } from '@/app/components/AppChrome';
+
+function localYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function last7DaysActivity(analyses: AnalysisResultRow[]) {
+  const dayKeys: { label: string; key: string }[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    dayKeys.push({
+      label: d.toLocaleDateString(undefined, { weekday: 'short' }),
+      key: localYmd(d),
+    });
+  }
+  const map = new Map<string, number>();
+  for (const { key } of dayKeys) map.set(key, 0);
+  for (const a of analyses) {
+    const key = localYmd(new Date(a.created_at));
+    if (map.has(key)) map.set(key, (map.get(key) ?? 0) + 1);
+  }
+  return dayKeys.map(({ label, key }) => ({ day: label, analyses: map.get(key) ?? 0 }));
+}
+
+function analysesThisMonth(analyses: AnalysisResultRow[]): number {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  return analyses.filter((a) => {
+    const d = new Date(a.created_at);
+    return d.getFullYear() === y && d.getMonth() === m;
+  }).length;
+}
+
+function avgConfidencePct(analyses: AnalysisResultRow[]): number | null {
+  if (analyses.length === 0) return null;
+  const vals = analyses.map((a) => a.confidence);
+  const max = Math.max(...vals);
+  const scale = max <= 1.001 ? 100 : 1;
+  const sum = vals.reduce((s, c) => s + c * scale, 0);
+  return sum / vals.length;
+}
+
+function formatRelativeLogin(iso: string | null | undefined): string {
+  if (iso == null || iso === '') return 'Just now';
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return 'Just now';
+  const sec = Math.round((Date.now() - t) / 1000);
+  if (sec < 60) return 'Just now';
+  if (sec < 3600) return `${Math.floor(sec / 60)} min ago`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)} hours ago`;
+  if (sec < 604800) return `${Math.floor(sec / 86400)} days ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function verdictLabel(verdict: string): string {
+  const v = verdict.toLowerCase();
+  if (v === 'real') return 'AUTHENTIC';
+  if (v === 'fake') return 'FAKE';
+  if (v === 'uncertain') return 'UNCERTAIN';
+  return verdict.toUpperCase();
+}
+
+function thumbnailForType(fileType: string): string {
+  if (fileType === 'video') return '🎥';
+  if (fileType === 'text') return '📝';
+  return '🖼️';
+}
+
+function basenamePath(p: string): string {
+  const s = p.replace(/\\/g, '/');
+  const i = s.lastIndexOf('/');
+  return i >= 0 ? s.slice(i + 1) || s : s || 'Analysis';
+}
+
+function confidenceDisplay(c: number): number {
+  return c <= 1.001 ? Math.round(c * 1000) / 10 : Math.round(c * 10) / 10;
+}
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(false);
-  const [userProfile, setUserProfile] = useState<{ username: string; email: string } | null>(null);
-  const [userStats] = useState({
-    totalAnalyses: 47,
-    thisMonth: 12,
-    accuracyRate: 98.7,
-    savedReports: 23,
-  });
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState<{
+    username: string;
+    email: string;
+    last_login?: string | null;
+  } | null>(null);
+  const [analysisRows, setAnalysisRows] = useState<AnalysisResultRow[]>([]);
 
   useEffect(() => {
-    const fetchUserProfile = async () => {
+    const load = async () => {
+      setStatsLoading(true);
       try {
-        const profile = await getUserProfile();
+        const [profile, rows] = await Promise.all([
+          getUserProfile(),
+          getAllAnalysisResults(),
+        ]);
         setUserProfile(profile);
+        const sorted = [...rows].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        setAnalysisRows(sorted);
       } catch {
-        console.error('Failed to fetch user profile');
-        setUserProfile({ username: 'User', email: '' });
+        console.error('Failed to load dashboard data');
+        try {
+          const profile = await getUserProfile();
+          setUserProfile(profile);
+        } catch {
+          setUserProfile({ username: 'User', email: '' });
+        }
+        setAnalysisRows([]);
+      } finally {
+        setStatsLoading(false);
       }
     };
-    fetchUserProfile();
+    load();
   }, []);
 
-  const recentAnalyses = [
-    {
-      id: '1',
-      type: 'image',
-      filename: 'suspicious_photo.jpg',
-      result: 'FAKE',
-      confidence: 94.2,
-      date: '2024-01-18',
-      status: 'completed',
-      thumbnail: '🖼️',
-    },
-    {
-      id: '2',
-      type: 'video',
-      filename: 'news_clip.mp4',
-      result: 'AUTHENTIC',
-      confidence: 87.5,
-      date: '2024-01-17',
-      status: 'completed',
-      thumbnail: '🎥',
-    },
-    {
-      id: '3',
-      type: 'text',
-      filename: 'article_text.txt',
-      result: 'AI-GENERATED',
-      confidence: 91.8,
-      date: '2024-01-16',
-      status: 'completed',
-      thumbnail: '📝',
-    },
-    {
-      id: '4',
-      type: 'image',
-      filename: 'profile_pic.png',
-      result: 'PROCESSING',
-      confidence: null as number | null,
-      date: '2024-01-18',
-      status: 'processing',
-      thumbnail: '⏳',
-    },
-  ];
+  const totalAnalyses = analysisRows.length;
+  const thisMonth = useMemo(() => analysesThisMonth(analysisRows), [analysisRows]);
+  const accuracyPct = useMemo(() => avgConfidencePct(analysisRows), [analysisRows]);
+  const savedReports = 0;
 
-  const quickStats = [
-    { label: 'Total Analyses', value: userStats.totalAnalyses, change: '+12%', trend: 'up' as const },
-    { label: 'This Month', value: userStats.thisMonth, change: '+3', trend: 'up' as const },
-    { label: 'Accuracy Rate', value: `${userStats.accuracyRate}%`, change: '+2.1%', trend: 'up' as const },
-    { label: 'Saved Reports', value: userStats.savedReports, change: '+5', trend: 'up' as const },
-  ];
+  const quickStats = useMemo(
+    () => [
+      {
+        label: 'Total Analyses',
+        value: statsLoading ? '…' : String(totalAnalyses),
+        barPct: totalAnalyses === 0 ? 0 : Math.min(100, 8 + totalAnalyses * 4),
+      },
+      {
+        label: 'This Month',
+        value: statsLoading ? '…' : String(thisMonth),
+        barPct: thisMonth === 0 ? 0 : Math.min(100, 10 + thisMonth * 8),
+      },
+      {
+        label: 'Avg. confidence',
+        value:
+          statsLoading ? '…' : accuracyPct == null ? '—' : `${accuracyPct.toFixed(1)}%`,
+        barPct:
+          accuracyPct == null ? 0 : Math.min(100, Math.max(0, accuracyPct)),
+      },
+      {
+        label: 'Saved Reports',
+        value: statsLoading ? '…' : String(savedReports),
+        barPct: 0,
+      },
+    ],
+    [statsLoading, totalAnalyses, thisMonth, accuracyPct, savedReports]
+  );
 
-  const activityData = [
-    { day: 'Mon', analyses: 8 },
-    { day: 'Tue', analyses: 12 },
-    { day: 'Wed', analyses: 6 },
-    { day: 'Thu', analyses: 15 },
-    { day: 'Fri', analyses: 9 },
-    { day: 'Sat', analyses: 4 },
-    { day: 'Sun', analyses: 7 },
-  ];
+  const activityData = useMemo(() => last7DaysActivity(analysisRows), [analysisRows]);
+  const activityMax = useMemo(
+    () => Math.max(1, ...activityData.map((d) => d.analyses)),
+    [activityData]
+  );
+
+  const recentAnalyses = useMemo(() => {
+    return analysisRows.slice(0, 20).map((a) => ({
+      id: String(a.id),
+      type: a.file_type,
+      filename: basenamePath(a.file_path),
+      result: verdictLabel(a.verdict),
+      confidence: confidenceDisplay(a.confidence),
+      date: new Date(a.created_at).toLocaleDateString(),
+      status: 'completed' as const,
+      thumbnail: thumbnailForType(a.file_type),
+    }));
+  }, [analysisRows]);
 
   const handleQuickUpload = (type: string) => {
     setIsLoading(true);
@@ -103,7 +197,7 @@ export default function Dashboard() {
         return 'text-red-600 bg-red-500/15 dark:text-red-400 dark:bg-red-500/20';
       case 'AUTHENTIC':
         return 'text-emerald-700 bg-emerald-500/15 dark:text-emerald-400 dark:bg-emerald-500/20';
-      case 'AI-GENERATED':
+      case 'UNCERTAIN':
         return 'text-amber-700 bg-amber-500/15 dark:text-amber-400 dark:bg-amber-500/20';
       case 'PROCESSING':
         return 'text-sky-700 bg-sky-500/15 dark:text-sky-400 dark:bg-sky-500/20';
@@ -197,7 +291,9 @@ export default function Dashboard() {
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-app-muted">Last login</p>
-                  <p className="font-medium text-app-text">2 hours ago</p>
+                  <p className="font-medium text-app-text">
+                    {formatRelativeLogin(userProfile?.last_login)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -210,21 +306,12 @@ export default function Dashboard() {
                 >
                   <div className="mb-4 flex items-center justify-between">
                     <div className="text-sm text-app-muted">{stat.label}</div>
-                    <div
-                      className={`rounded-full px-2 py-1 text-xs ${
-                        stat.trend === 'up'
-                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                          : 'bg-red-500/15 text-red-700 dark:text-red-400'
-                      }`}
-                    >
-                      {stat.change}
-                    </div>
                   </div>
                   <div className="mb-2 text-3xl font-bold text-app-text">{stat.value}</div>
                   <div className="h-2 w-full rounded-full bg-app-bg-mid">
                     <div
                       className="h-2 rounded-full bg-app-accent transition-all duration-1000"
-                      style={{ width: `${[72, 48, 94, 56][index]}%` }}
+                      style={{ width: `${stat.barPct}%` }}
                     />
                   </div>
                 </div>
@@ -257,13 +344,15 @@ export default function Dashboard() {
             </div>
 
             <div className={panel}>
-              <h3 className="mb-6 text-2xl font-bold text-app-text">Weekly Activity</h3>
+              <h3 className="mb-6 text-2xl font-bold text-app-text">Last 7 days</h3>
               <div className="flex h-48 items-end justify-between gap-2">
                 {activityData.map((data, index) => (
                   <div key={index} className="flex flex-1 flex-col items-center">
                     <div
-                      className="w-full rounded-t-lg bg-gradient-to-t from-app-accent to-red-400 transition-all hover:opacity-90"
-                      style={{ height: `${(data.analyses / 15) * 100}%` }}
+                      className="w-full min-h-[4px] rounded-t-lg bg-gradient-to-t from-app-accent to-red-400 transition-all hover:opacity-90"
+                      style={{
+                        height: `${(data.analyses / activityMax) * 100}%`,
+                      }}
                       title={`${data.analyses} analyses`}
                     />
                     <div className="mt-2 text-sm text-app-muted">{data.day}</div>
@@ -289,7 +378,16 @@ export default function Dashboard() {
               </div>
 
               <div className="space-y-4">
-                {recentAnalyses.map((analysis) => (
+                {statsLoading && (
+                  <p className="text-app-muted">Loading your analyses…</p>
+                )}
+                {!statsLoading && recentAnalyses.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-app-border bg-app-bg-mid/40 py-12 text-center">
+                    <p className="text-app-muted">No analyses yet. Use Quick Actions on Overview to run your first check.</p>
+                  </div>
+                )}
+                {!statsLoading &&
+                  recentAnalyses.map((analysis) => (
                   <div
                     key={analysis.id}
                     className="cursor-pointer rounded-xl border border-app-border bg-app-bg-mid/80 p-6 transition-all hover:border-app-accent/25 hover:bg-app-surface-hover"
@@ -309,9 +407,7 @@ export default function Dashboard() {
                         <div className={`rounded-full px-3 py-1 text-sm font-medium ${getResultColor(analysis.result)}`}>
                           {analysis.result}
                         </div>
-                        {analysis.confidence != null && (
-                          <div className="font-semibold text-app-text">{analysis.confidence}%</div>
-                        )}
+                        <div className="font-semibold text-app-text">{analysis.confidence}%</div>
                         <div className="text-2xl">{getStatusIcon(analysis.status)}</div>
                         <Link href={`/results/${analysis.id}`} className="text-app-accent hover:text-app-accent-hover">
                           View Details

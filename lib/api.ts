@@ -214,15 +214,59 @@ export async function getAnalysisResult(id: string) {
   return { result: data };
 }
 
-// Get user's analysis history
+/** One row from GET /analysis/results/ (DRF paginated list item). */
+export type AnalysisResultRow = {
+  id: number;
+  file_type: string;
+  file_path: string;
+  verdict: string;
+  confidence: number;
+  created_at: string;
+  updated_at?: string;
+};
+
+type PaginatedResults<T> = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+};
+
+// Get user's analysis history (first page only — see getAllAnalysisResults)
 export async function getAnalysisHistory() {
   const response = await apiRequest('/analysis/results/');
-  
+
   if (!response.ok) {
     throw new Error('Failed to fetch analysis history');
   }
 
   return await response.json();
+}
+
+const MAX_ANALYSIS_PAGES = 200;
+
+/** Fetch all pages of analysis results for the current user (dashboard stats). */
+export async function getAllAnalysisResults(): Promise<AnalysisResultRow[]> {
+  const all: AnalysisResultRow[] = [];
+  let page = 1;
+  for (;;) {
+    if (page > MAX_ANALYSIS_PAGES) break;
+    const response = await apiRequest(`/analysis/results/?page=${page}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch analysis history');
+    }
+    const data = (await response.json()) as
+      | PaginatedResults<AnalysisResultRow>
+      | AnalysisResultRow[];
+    if (Array.isArray(data)) {
+      return data;
+    }
+    const batch = data.results ?? [];
+    all.push(...batch);
+    if (!data.next || batch.length === 0) break;
+    page += 1;
+  }
+  return all;
 }
 
 // Get current user profile
