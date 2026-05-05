@@ -33,6 +33,7 @@ export default function Results({ params }: { params: Promise<{ id: string }> })
   const [result, setResult] = useState<ResultShape | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [heatmapLoadError, setHeatmapLoadError] = useState(false);
 
   useEffect(() => {
     const fetchResult = async () => {
@@ -50,6 +51,10 @@ export default function Results({ params }: { params: Promise<{ id: string }> })
 
     fetchResult();
   }, [resolvedParams.id]);
+
+  useEffect(() => {
+    setHeatmapLoadError(false);
+  }, [result?.id, result?.heatmap_path]);
 
   if (loading) {
     return (
@@ -155,25 +160,33 @@ export default function Results({ params }: { params: Promise<{ id: string }> })
 
         {heatmapPath ? (
           <div className={`${card} mb-8`}>
-            <h3 className="mb-6 text-2xl font-bold text-app-text">
-              {verdict === 'REAL' ? '🌡️ Attention map (authentic)' : '🌡️ Manipulation heatmap'}
-            </h3>
+            <h3 className="mb-2 text-2xl font-bold text-app-text">🌡️ Heatmap</h3>
+            <p className="mb-6 text-sm text-app-muted">
+              {verdict === 'REAL'
+                ? 'Shown for every image. For authentic results we use blue / cyan tones only (same model cues as fake — different colors, not «manipulation red»).'
+                : 'Warm colors (red / yellow) highlight regions that pushed the model toward fake or uncertain — not pixel-perfect masks.'}
+            </p>
             <div className="rounded-xl border border-app-border bg-app-bg-mid/80 p-8 text-center">
-              {/* eslint-disable-next-line @next/next/no-img-element -- dynamic backend media URL */}
-              <img
-                src={mediaFileUrl(heatmapPath)}
-                alt={verdict === 'REAL' ? 'Cool-toned attention map' : 'Heatmap overlay'}
-                className="mx-auto h-auto max-w-full rounded-xl"
-                onError={(e) => {
-                  console.error('Heatmap image failed to load:', heatmapPath);
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-              <p className="mt-4 text-app-muted">
-                {verdict === 'REAL'
-                  ? 'Blue / cyan highlights show where the model focused for this authentic result — not red manipulation markers like fake detections.'
-                  : 'Red / warm areas are approximate regions that influenced the model toward fake or uncertain classifications.'}
-              </p>
+              {heatmapLoadError ? (
+                <p className="text-app-text">
+                  Heatmap file did not load. Set <code className="rounded bg-app-bg-mid px-1">NEXT_PUBLIC_API_URL</code> on
+                  Vercel to your API base ending in <code className="rounded bg-app-bg-mid px-1">/api</code>, redeploy, and
+                  ensure the backend serves <code className="rounded bg-app-bg-mid px-1">/media/</code> on the same host.
+                </p>
+              ) : (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- dynamic backend media URL */}
+                  <img
+                    src={mediaFileUrl(heatmapPath)}
+                    alt={verdict === 'REAL' ? 'Heatmap overlay (authentic styling)' : 'Heatmap overlay'}
+                    className="mx-auto h-auto max-w-full rounded-xl"
+                    onError={() => {
+                      console.error('Heatmap image failed to load:', heatmapPath);
+                      setHeatmapLoadError(true);
+                    }}
+                  />
+                </>
+              )}
             </div>
           </div>
         ) : null}
