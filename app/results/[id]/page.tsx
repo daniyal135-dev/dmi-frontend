@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useEffect, use } from 'react';
-import { getAnalysisResult } from '@/lib/api';
+import { getAnalysisResult, mediaFileUrl } from '@/lib/api';
 import { AppBackground, SiteHeader } from '@/app/components/AppChrome';
 
 interface ResultShape {
@@ -155,19 +155,25 @@ export default function Results({ params }: { params: Promise<{ id: string }> })
 
         {heatmapPath ? (
           <div className={`${card} mb-8`}>
-            <h3 className="mb-6 text-2xl font-bold text-app-text">🌡️ Manipulation Heatmap</h3>
+            <h3 className="mb-6 text-2xl font-bold text-app-text">
+              {verdict === 'REAL' ? '🖼️ Analyzed image' : '🌡️ Manipulation heatmap'}
+            </h3>
             <div className="rounded-xl border border-app-border bg-app-bg-mid/80 p-8 text-center">
               {/* eslint-disable-next-line @next/next/no-img-element -- dynamic backend media URL */}
               <img
-                src={`http://127.0.0.1:8000/media/${heatmapPath}`}
-                alt="Heatmap"
+                src={mediaFileUrl(heatmapPath)}
+                alt={verdict === 'REAL' ? 'Analyzed image' : 'Heatmap overlay'}
                 className="mx-auto h-auto max-w-full rounded-xl"
                 onError={(e) => {
                   console.error('Heatmap image failed to load:', heatmapPath);
                   e.currentTarget.style.display = 'none';
                 }}
               />
-              <p className="mt-4 text-app-muted">Red areas indicate potential manipulation zones</p>
+              <p className="mt-4 text-app-muted">
+                {verdict === 'REAL'
+                  ? 'No manipulation overlay — this preview matches your upload because the model classified the image as authentic.'
+                  : 'Red / warm areas are approximate regions that influenced the model toward fake or uncertain classifications.'}
+              </p>
             </div>
           </div>
         ) : null}

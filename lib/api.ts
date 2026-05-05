@@ -22,6 +22,21 @@ function apiBase(): string {
   ).replace(/\/+$/, '');
 }
 
+/**
+ * Django serves media at `/media/...` on the backend origin (not under `/api/`).
+ * Uses `NEXT_PUBLIC_API_URL` ending in `/api` so Vercel clients load heatmaps from ngrok/production host.
+ */
+export function mediaFileUrl(relativePath: string): string {
+  const p = relativePath.replace(/^\/+/, '');
+  const apiRoot = (
+    process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api'
+  ).replace(/\/+$/, '');
+  const origin = apiRoot.endsWith('/api')
+    ? apiRoot.slice(0, -4)
+    : apiRoot.replace(/\/api\/?$/, '');
+  return `${origin}/media/${p}`;
+}
+
 function parseApiJson<T>(text: string): T {
   const trimmed = text.trim();
   if (trimmed.startsWith('<')) {
