@@ -156,13 +156,13 @@ export default function Results({ params }: { params: Promise<{ id: string }> })
         {heatmapPath ? (
           <div className={`${card} mb-8`}>
             <h3 className="mb-6 text-2xl font-bold text-app-text">
-              {verdict === 'REAL' ? '🖼️ Analyzed image' : '🌡️ Manipulation heatmap'}
+              {verdict === 'REAL' ? '🌡️ Attention map (authentic)' : '🌡️ Manipulation heatmap'}
             </h3>
             <div className="rounded-xl border border-app-border bg-app-bg-mid/80 p-8 text-center">
               {/* eslint-disable-next-line @next/next/no-img-element -- dynamic backend media URL */}
               <img
                 src={mediaFileUrl(heatmapPath)}
-                alt={verdict === 'REAL' ? 'Analyzed image' : 'Heatmap overlay'}
+                alt={verdict === 'REAL' ? 'Cool-toned attention map' : 'Heatmap overlay'}
                 className="mx-auto h-auto max-w-full rounded-xl"
                 onError={(e) => {
                   console.error('Heatmap image failed to load:', heatmapPath);
@@ -171,7 +171,7 @@ export default function Results({ params }: { params: Promise<{ id: string }> })
               />
               <p className="mt-4 text-app-muted">
                 {verdict === 'REAL'
-                  ? 'No manipulation overlay — this preview matches your upload because the model classified the image as authentic.'
+                  ? 'Blue / cyan highlights show where the model focused for this authentic result — not red manipulation markers like fake detections.'
                   : 'Red / warm areas are approximate regions that influenced the model toward fake or uncertain classifications.'}
               </p>
             </div>
