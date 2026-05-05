@@ -45,6 +45,11 @@ async function proxy(req: NextRequest, pathSegments: string[]) {
   if (auth) {
     headers.set('authorization', auth);
   }
+  // Ngrok free: server-side fetch otherwise gets HTML interstitial → "HTML instead of JSON" on Vercel.
+  if (/ngrok/i.test(base)) {
+    // Free ngrok: use a non-empty value; 69420 is the documented skip for programmatic clients.
+    headers.set('ngrok-skip-browser-warning', '69420');
+  }
 
   const init: RequestInit = {
     method: req.method,

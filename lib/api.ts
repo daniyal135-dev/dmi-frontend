@@ -26,7 +26,7 @@ function parseApiJson<T>(text: string): T {
   const trimmed = text.trim();
   if (trimmed.startsWith('<')) {
     throw new Error(
-      'Server returned HTML instead of JSON. If you are on Vercel: set BACKEND_API_BASE_URL (or NEXT_PUBLIC_API_URL) to https://YOUR-RAILWAY.up.railway.app/api under Project → Settings → Environment Variables, then Redeploy. Check the /api/backend proxy route logs if it persists.'
+      'Server returned HTML instead of JSON. On Vercel: set BACKEND_API_BASE_URL and NEXT_PUBLIC_API_URL to your API base ending in /api (e.g. ngrok https://xxx.ngrok-free.dev/api), save, Redeploy. Ngrok free sometimes serves an HTML warning unless the proxy skips it (latest frontend includes this). Check Vercel Function logs for /api/backend.'
     );
   }
   try {
